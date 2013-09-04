@@ -36,6 +36,7 @@
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="readme.txt" />
 		<Extensions>
 			<code_completion />
 			<envvars />
