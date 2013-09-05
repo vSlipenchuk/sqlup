@@ -26,6 +26,9 @@
 			<Add library="pthread" />
 			<Add library="dl" />
 		</Linker>
+		<Unit filename="coders.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="common.c">
 			<Option compilerVar="CC" />
 		</Unit>
