@@ -26,6 +26,10 @@
 			<Add library="pthread" />
 			<Add library="dl" />
 		</Linker>
+		<Unit filename="blob.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="blob.h" />
 		<Unit filename="coders.c">
 			<Option compilerVar="CC" />
 		</Unit>

@@ -1,3 +1,9 @@
+
+
+Test:
+  utf8 & blb
+  sqlite bulk upload (text)
+
 Логика простая:
  1) есть таблица: create table tbl(w1 varchar(80), w2 varchar(80),w3 varchar(80), w4 varchar(80) );
  2) входящий поток сканируется - слова грузятся в таблицу;

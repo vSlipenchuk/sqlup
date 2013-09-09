@@ -6,6 +6,8 @@
 
 //#include "coders.c"
 
+// dirty code to check sqlite&utf8 SQL
+
 int utf8len(char *str) {
 int len = strlen(str);
 int cnt = 0;
@@ -54,17 +56,12 @@ return db_compile(db,sql) && db_exec(db);
 int db_prn_line(database *db) {
     int i;
 for(i=0;i<db->col_count;i++) {
-   printf("%s ",db_text(db,i));
+   printf("%s\t",db_text(db,i));
    }
 printf("\n");
 }
 
-int db_console(database *db) {
- while(1) {
-       char buf[1024];
-       memset(buf,0,sizeof(buf));
-       gets(buf);
-       printf("strlen=%d utf8len=%d buf='%s'\n",strlen(buf),utf8len(buf),buf);
+int db_print(database *db,char *buf) {
        if (!db_exec_once(db,buf)) {
           printf("exec failed: %s\n",db->error);
           } else {
@@ -77,49 +74,158 @@ int db_console(database *db) {
 
               }
           }
-       utf8_prn_words(buf);
+return 1;
+}
+
+int db_console(database *db) {
+ while(1) {
+       char buf[1024];
+       memset(buf,0,sizeof(buf));
+       gets(buf);
+       printf("strlen=%d utf8len=%d buf='%s'\n",strlen(buf),utf8len(buf),buf);
+       db_print(db,buf);
+       //utf8_prn_words(buf);
        }
 }
 
-#define MAX_WORD 10
+#define MAX_WORD 10 /* Maximum Columns in Table*/
+#define COLLEN   30 /* MaxColumnNameLen*/
 
 int skip_head = 1;
 int had_col_names = 1; // extract it as colnames
+int table_ready  = 0;
+
+typedef char colNAME[COLLEN];
+
+colNAME colName[MAX_WORD]; // columnNames
+char tbl[100]="tbl"; // default table
 
 
+#define strNcpy(A,B) { strncpy(A,B,sizeof(A)-1); A[sizeof(A)-1]=0;}
+#include "blob.h"
+
+int db_bind_text(database *db,int idx, char *val,int len);
+
+
+char buf[1024],SQL[1024];
 
 void load_file(FILE *f) {
-char buf[1024];
+//char buf[1024];
 char *w[MAX_WORD];
+int i;
+table_ready = 0;
+char *str = 0; // my blob here
+int max_col = MAX_WORD;
+for(i=0;i<MAX_WORD;i++) sprintf(colName[i],"W%d",i); // W0,W1,... - default column name
 while ( fgets( buf,sizeof(buf), f) ) {
    int len = strlen(buf);
    char *p=buf;
    if (skip_head) {  skip_head--; continue;  }
-   if (had_col_names) {
-       had_col_names = 0;
-
-       }
-
    while(len>0 && strchr(" \t\r\n",buf[len-1])) {buf[len-1]=0; len--;}
-   printf("LINE:<%s>\n",buf);
-   int i;
    for(i=0;i<MAX_WORD;i++) w[i]=utf8_get_word(&p,0);
+   if (had_col_names) { // use the line to rename
+       had_col_names = 0;
+       for(i=0;i<MAX_WORD;i++) {
+              if (strlen(w[i])==0) { max_col = i; break; } // empty col means all
+              strNcpy(colName[i],w[i]); // JustCopy
+              }
+       continue; // again
+       }
+    if (!table_ready) {
+       db_exec_once(db,"drop table tbl");
+       db_exec_once(db,"commit");
 
-   for(i=0;i<MAX_WORD;i++) printf("W%d=%s\n",i,w[i]);
 
-   }
+       //blob_setLength(&str,0);       blob_cat(&str,"create table tbl(",-1);       printf("STR<%s> len=%d\n",str,blob_getLength(str));
+       sprintf(SQL,"create table tbl(");
+       for(i=0;i<max_col;i++) {
+           //printf("HERE COL: <%s>\n",colName[i]);
+           //blob_cat(&str,colName[i],-1);           blob_cat(&str," varchar2 ",-1);
+           //if (i==max_col-1) blob_cat(&str,")",-1); else blob_cat(&str,",",-1);
+           strcat(SQL,colName[i]); strcat(SQL," varchar2 ");
+           if (i==max_col-1) strcat(SQL,")"); else strcat(SQL,",");
+           }
+       printf("CreateTableSQL: '%s'\n",SQL);
+       //char *s = "create table tbl(Destination varchar(80) ,Gateway varchar(80) ,Genmask varchar(80) ,Flags varchar(80) ,MSS varchar(80) ,Window varchar(80) ,irtt varchar(80) ,Iface varchar(80))";
+
+       int ok = db_exec_once(db,SQL);
+       printf("tbl created=%d\n",ok);
+       if (!ok) {
+            printf("FailedCreated table %s\n",db->error);
+            return 0;
+            }
+       table_ready = 1; // ok
+ //      }
+       blob_setLength(&str,0);       blob_cat(&str,"insert into tbl(",-1);
+       //sprintf(SQL,"insert into tbl(");
+       for(i=0;i<max_col;i++) {
+           ///printf("HERE COL: <%s>\n",colName[i]);
+           blob_cat(&str,colName[i],-1);
+           //blob_cat(&str," varchar(80) ",-1);
+           if (i==max_col-1) blob_cat(&str,")",-1); else blob_cat(&str,",",-1);
+           //strcat(SQL,colName[i]); //strcat(SQL,",");
+           //if (i==max_col-1) strcat(SQL,")"); else strcat(SQL,",");
+           }
+        blob_cat(&str," values(",-1);
+        //strcat(SQL," values(");
+        for(i=0;i<max_col;i++) {
+           ///printf("HERE COL: <%s>\n",colName[i]);
+           blob_cat(&str,"?",-1);
+           //blob_cat(&str," varchar(80) ",-1);
+           if (i==max_col-1) blob_cat(&str,")",-1); else blob_cat(&str,",",-1);
+           //strcat(SQL,"?");
+           //blob_cat(&str," varchar(80) ",-1);
+           //if (i==max_col-1) strcat(SQL,")"); else strcat(SQL,",");
+           }
+       printf("SQL:%s\n",str);
+       if (!db_compile(db,str)) {
+           printf("SQL compile error %s\n",db->error);
+           return 0;
+           }
+       printf("OK, compiled\n");
+       // - тут должна быть работа со строками. И без нее - вообще никуда.
 }
+   //while(len>0 && strchr(" \t\r\n",buf[len-1])) {buf[len-1]=0; len--;}
+   //printf("LINE:<%s>\n",buf);
+   //int i;
+   //for(i=0;i<MAX_WORD;i++) w[i]=utf8_get_word(&p,0);
+   //blob_setLength(&str,0);
+   //blob_cat(&str,"insert into tbl( ",-1);
+   for(i=0;i<max_col;i++) {
+        char *p = w[i]; int l = strlen(p);
+        //p="new_one_and";
+        printf("{{%s}}[%d]",p,strlen(p));
+        //int k; for(k=0;k<l;k++) printf("-%x-",p[k]);
+        //printf("\n");
+        db_bind_text(db,i+1,p,l);
+        }
+    printf("\n");
+   if (!db_exec(db)) {
+       printf("dbexec err=%s\n",db->error);
+       return 0;
+      }
+   }
+blob_release(&str);
+}
+
+
 
 int main(int npar,char **par) {
     if (!db_connect(db,"local.db",0,0)) { // or - to memory ?
        printf("Error code=%d text=%s\n",db->err_code,db->error);
        return 1;
        }
-    db_exec_once(db,"drop table tbl"); // if exists
+    //db_exec_once(db,"drop table tbl"); // if exists
 
     printf("Hello world, Connected to sqlite!\n");
     //db_console(db);
     load_file(stdin);
     printf("Done\n");
+     db_print(db,"select * from tbl");
+
     return 0;
 }
+
+
+ //;//create table tbl(Destination varchar(80) ,Gateway varchar(80) ,Genmask varchar(80) ,Flags varchar(80) ,MSS varchar(80) ,Window varchar(80) ,irtt varchar(80) ,Iface varchar(80))
+
