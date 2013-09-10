@@ -1,4 +1,7 @@
-
+todo:
+  -b[egin] -e[nd]  = limiters in text streams...
+  -d[ebug] - level
+  -Heads ON/OFF (now - on)
 
 Test:
   utf8 & blb

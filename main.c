@@ -53,20 +53,20 @@ int db_exec_once(database *db, char *sql) {
 return db_compile(db,sql) && db_exec(db);
 }
 
-int db_prn_line(database *db) {
+void db_prn_line(database *db) {
     int i;
 for(i=0;i<db->col_count;i++) {
-   printf("%s\t",db_text(db,i));
+   printf("%s%c",db_text(db,i),(i+1<db->col_count)?'\t':'\n');
    }
-printf("\n");
 }
 
-int db_print(database *db,char *buf) {
+int db_print(database *db,char *buf,int show_head) {
        if (!db_exec_once(db,buf)) {
-          printf("exec failed: %s\n",db->error);
+          fprintf(stderr,"exec failed: %s\n",db->error);
           } else {
-          printf("exec ok, col_count=%d\n",db->col_count);
+          //printf("exec ok, col_count=%d\n",db->col_count);
           if (db->col_count>0) { // do fetch
+
               while (db->row_here) {
                    db_prn_line(db);
                    if (!db_exec(db)) break;
@@ -82,8 +82,8 @@ int db_console(database *db) {
        char buf[1024];
        memset(buf,0,sizeof(buf));
        gets(buf);
-       printf("strlen=%d utf8len=%d buf='%s'\n",strlen(buf),utf8len(buf),buf);
-       db_print(db,buf);
+       //printf("strlen=%d utf8len=%d buf='%s'\n",strlen(buf),utf8len(buf),buf);
+       db_print(db,buf,1);
        //utf8_prn_words(buf);
        }
 }
@@ -136,7 +136,9 @@ while ( fgets( buf,sizeof(buf), f) ) {
        db_exec_once(db,"commit");
 
 
-       //blob_setLength(&str,0);       blob_cat(&str,"create table tbl(",-1);       printf("STR<%s> len=%d\n",str,blob_getLength(str));
+       //blob_setLength(&str,0);       blob_cat(&str,"
+
+                                                 table tbl(",-1);       printf("STR<%s> len=%d\n",str,blob_getLength(str));
        sprintf(SQL,"create table tbl(");
        for(i=0;i<max_col;i++) {
            //printf("HERE COL: <%s>\n",colName[i]);
@@ -145,14 +147,15 @@ while ( fgets( buf,sizeof(buf), f) ) {
            strcat(SQL,colName[i]); strcat(SQL," varchar2 ");
            if (i==max_col-1) strcat(SQL,")"); else strcat(SQL,",");
            }
-       printf("CreateTableSQL: '%s'\n",SQL);
+       //printf("CreateTableSQL: '%s'\n",SQL);
        //char *s = "create table tbl(Destination varchar(80) ,Gateway varchar(80) ,Genmask varchar(80) ,Flags varchar(80) ,MSS varchar(80) ,Window varchar(80) ,irtt varchar(80) ,Iface varchar(80))";
 
        int ok = db_exec_once(db,SQL);
-       printf("tbl created=%d\n",ok);
+        //printf("tbl created=%d sql:%s\n",ok,SQL);
        if (!ok) {
-            printf("FailedCreated table %s\n",db->error);
-            return 0;
+            fprintf(stderr,"sqlup: failed_create_table:%s, sql:%s\n",db->error,SQL);
+            exit(4);
+            //return 0;
             }
        table_ready = 1; // ok
  //      }
@@ -177,12 +180,13 @@ while ( fgets( buf,sizeof(buf), f) ) {
            //blob_cat(&str," varchar(80) ",-1);
            //if (i==max_col-1) strcat(SQL,")"); else strcat(SQL,",");
            }
-       printf("SQL:%s\n",str);
+       //printf("SQL:%s\n",str);
        if (!db_compile(db,str)) {
-           printf("SQL compile error %s\n",db->error);
-           return 0;
+           fprintf(stderr,"SQL compile error %s\n",db->error);
+           exit(3);
+           //return 0;
            }
-       printf("OK, compiled\n");
+       //printf("OK, compiled\n");
        // - тут должна быть работа со строками. И без нее - вообще никуда.
 }
    //while(len>0 && strchr(" \t\r\n",buf[len-1])) {buf[len-1]=0; len--;}
@@ -194,34 +198,66 @@ while ( fgets( buf,sizeof(buf), f) ) {
    for(i=0;i<max_col;i++) {
         char *p = w[i]; int l = strlen(p);
         //p="new_one_and";
-        printf("{{%s}}[%d]",p,strlen(p));
+        //printf("{{%s}}[%d]",p,strlen(p));
         //int k; for(k=0;k<l;k++) printf("-%x-",p[k]);
         //printf("\n");
         db_bind_text(db,i+1,p,l);
         }
-    printf("\n");
+    //printf("\n");
    if (!db_exec(db)) {
-       printf("dbexec err=%s\n",db->error);
-       return 0;
-      }
+       fprintf(stderr,"sqlup: dbexec err:%s\n",db->error);
+       exit(3);
+}
    }
 blob_release(&str);
 }
 
+int prn_help() {
+printf("sqlup usage: [-h<head_lines_skip>] [-c<col_has_names>] [-S<sql_to_show>] [-H<sql_heads>] [-d<debug_level]\n");
+return 0;
+}
+
+char *show_sql = "select * from tbl";
+int   show_heads = 1;
 
 
 int main(int npar,char **par) {
-    if (!db_connect(db,"local.db",0,0)) { // or - to memory ?
-       printf("Error code=%d text=%s\n",db->err_code,db->error);
+int i;
+for(i=1;i<npar;i++) {
+    char *cmd = par[i];
+    if (*cmd == '-') {
+       cmd++;
+       switch(*cmd) {
+       case 'h':
+          sscanf(cmd+1,"%d",&skip_head);
+         break;
+       case 'c':
+          sscanf(cmd+1,"%d",&had_col_names);
+          break;
+       case 'S':
+           show_sql = cmd+1;
+           break;
+       case 'H':
+           sscanf(cmd+1,"%d",&show_heads);
+       default:
+          prn_help(); exit(1);
+       }
+
+       } else {
+          prn_help(); exit(1);
+       }
+    }
+if (!db_connect(db,"local.db",0,0)) { // or - to memory ?
+       fprintf(stderr,"sqlup: open db fail, err:%s",db->error);
        return 1;
        }
-    //db_exec_once(db,"drop table tbl"); // if exists
+    db_exec_once(db,"drop table tbl"); // if exists
 
-    printf("Hello world, Connected to sqlite!\n");
+    //printf("Hello world, Connected to sqlite!\n");
     //db_console(db);
     load_file(stdin);
-    printf("Done\n");
-     db_print(db,"select * from tbl");
+    //printf("Done\n");
+    if (show_sql[0]) db_print(db,show_sql,show_heads);
 
     return 0;
 }
