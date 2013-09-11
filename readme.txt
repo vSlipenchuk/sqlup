@@ -1,7 +1,8 @@
 todo:
-  -b[egin] -e[nd]  = limiters in text streams...
-  -d[ebug] - level
+  +)-b[egin] -e[nd]  = limiters in text streams...
+  +)-d[ebug] - level
   -Heads ON/OFF (now - on)
+  -Split-By-Headers-Begin
 
 Test:
   utf8 & blb

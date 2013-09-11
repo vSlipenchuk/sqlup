@@ -91,8 +91,8 @@ int db_console(database *db) {
 #define MAX_WORD 10 /* Maximum Columns in Table*/
 #define COLLEN   30 /* MaxColumnNameLen*/
 
-int skip_head = 1;
-int had_col_names = 1; // extract it as colnames
+int skip_head = 0;
+int had_col_names = 0; // extract it as colnames
 int table_ready  = 0;
 
 typedef char colNAME[COLLEN];
@@ -108,6 +108,7 @@ int db_bind_text(database *db,int idx, char *val,int len);
 
 
 char buf[1024],SQL[1024];
+char *data_begin=0,*data_end=0;
 
 void load_file(FILE *f) {
 //char buf[1024];
@@ -120,13 +121,23 @@ for(i=0;i<MAX_WORD;i++) sprintf(colName[i],"W%d",i); // W0,W1,... - default colu
 while ( fgets( buf,sizeof(buf), f) ) {
    int len = strlen(buf);
    char *p=buf;
+   if (data_begin) { // need start data begin
+        if (memcmp(p,data_begin,strlen(data_begin))!=0) continue; // not yet
+        data_begin=0; continue; // skip it
+        }
+   if (data_end) {
+        if (memcmp(p,data_end,strlen(data_end))==0) return ; // done it !!!
+        }
    if (skip_head) {  skip_head--; continue;  }
+   //printf("<proc:%s>\n",p);
    while(len>0 && strchr(" \t\r\n",buf[len-1])) {buf[len-1]=0; len--;}
    for(i=0;i<MAX_WORD;i++) w[i]=utf8_get_word(&p,0);
    if (had_col_names) { // use the line to rename
        had_col_names = 0;
        for(i=0;i<MAX_WORD;i++) {
               if (strlen(w[i])==0) { max_col = i; break; } // empty col means all
+              char *n=w[i];
+              int j; for(j=0;n[j];j++) if (strchr(" \"'-+",n[j])) n[j]='_';
               strNcpy(colName[i],w[i]); // JustCopy
               }
        continue; // again
@@ -138,13 +149,15 @@ while ( fgets( buf,sizeof(buf), f) ) {
 
        //blob_setLength(&str,0);       blob_cat(&str,"
 
-                                                 table tbl(",-1);       printf("STR<%s> len=%d\n",str,blob_getLength(str));
+                               //                  table tbl(",-1);       printf("STR<%s> len=%d\n",str,blob_getLength(str));
        sprintf(SQL,"create table tbl(");
        for(i=0;i<max_col;i++) {
            //printf("HERE COL: <%s>\n",colName[i]);
            //blob_cat(&str,colName[i],-1);           blob_cat(&str," varchar2 ",-1);
            //if (i==max_col-1) blob_cat(&str,")",-1); else blob_cat(&str,",",-1);
+           //strcat(SQL,"\"",-1);
            strcat(SQL,colName[i]); strcat(SQL," varchar2 ");
+
            if (i==max_col-1) strcat(SQL,")"); else strcat(SQL,",");
            }
        //printf("CreateTableSQL: '%s'\n",SQL);
@@ -228,6 +241,12 @@ for(i=1;i<npar;i++) {
     if (*cmd == '-') {
        cmd++;
        switch(*cmd) {
+       case 'b':
+          data_begin=cmd+1;
+          break;
+       case 'e':
+          data_end=cmd+1;
+           break;
        case 'h':
           sscanf(cmd+1,"%d",&skip_head);
          break;
